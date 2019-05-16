@@ -440,7 +440,6 @@ public class FlowableFlatMapTest {
         verify(subscriber, never()).onError(any(Throwable.class));
     }
 
-    @Ignore("Don't care for any reordering")
     @Test(timeout = 10000)
     public void flatMapRangeAsyncLoop() {
         for (int i = 0; i < 2000; i++) {
@@ -466,6 +465,50 @@ public class FlowableFlatMapTest {
             ts.assertNoErrors();
             List<Integer> list = ts.values();
             assertEquals(1000, list.size());
+            boolean f = false;
+            for (int j = 0; j < list.size(); j++) {
+                if (list.get(j) != j) {
+                    System.out.println(j + " " + list.get(j));
+                    f = true;
+                }
+            }
+            if (f) {
+                Assert.fail("Results are out of order!");
+            }
+        }
+    }
+
+    @Test(timeout = 10000)
+    public void flatMapRangeMultipleAsyncLoop() {
+        for (int i = 0; i < 2000; i++) {
+            if (i % 10 == 0) {
+                System.out.println("flatMapRangeMultipleAsyncLoop > " + i);
+            }
+            TestSubscriber<Integer> ts = new TestSubscriber<Integer>();
+            Flowable.range(0, 1000)
+                    .map(new Function<Integer, Integer>() {
+                        @Override
+                        public Integer apply(Integer i) {
+                            return i * 3;
+                        }
+                    })
+                    .flatMap(new Function<Integer, Flowable<Integer>>() {
+                        @Override
+                        public Flowable<Integer> apply(Integer t) {
+                            return Flowable.just(t, t + 1, t + 2);
+                        }
+                    })
+                    .observeOn(Schedulers.computation())
+                    .subscribe(ts);
+
+            ts.awaitTerminalEvent(2500, TimeUnit.MILLISECONDS);
+            if (ts.completions() == 0) {
+                System.out.println(ts.valueCount());
+            }
+            ts.assertTerminated();
+            ts.assertNoErrors();
+            List<Integer> list = ts.values();
+            assertEquals(1000 * 3, list.size());
             boolean f = false;
             for (int j = 0; j < list.size(); j++) {
                 if (list.get(j) != j) {

@@ -433,26 +433,26 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
 
                 boolean innerCompleted = false;
                 if (n != 0) {
-                    long startId = lastId;
+                    final long startId = lastId;
                     int index = lastIndex;
 
                     if (n <= index || inner[index].id != startId) {
                         if (n <= index) {
-                            index = 0;
+                            index = n - 1;
                         }
-                        int j = index;
-                        for (int i = 0; i < n; i++) {
-                            if (inner[j].id == startId) {
+                        while (index > 0) {
+                            index--;
+                            final long id = inner[index].id;
+                            if (id == startId) {
+                                break;
+                            } else if (id < startId) {
+                                // startId was removed, continue with next greater id
+                                index++;
                                 break;
                             }
-                            j++;
-                            if (j == n) {
-                                j = 0;
-                            }
                         }
-                        index = j;
-                        lastIndex = j;
-                        lastId = inner[j].id;
+                        lastIndex = index;
+                        lastId = inner[index].id;
                     }
 
                     int j = index;
@@ -464,6 +464,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
 
                         @SuppressWarnings("unchecked")
                         InnerSubscriber<T, U> is = (InnerSubscriber<T, U>)inner[j];
+                        index = j;
 
                         U o = null;
                         for (;;) {
@@ -538,8 +539,8 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
                             j = 0;
                         }
                     }
-                    lastIndex = j;
-                    lastId = inner[j].id;
+                    lastIndex = index;
+                    lastId = inner[index].id;
                 }
 
                 if (replenishMain != 0L && !cancelled) {

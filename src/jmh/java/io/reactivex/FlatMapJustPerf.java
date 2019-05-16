@@ -13,6 +13,7 @@
 
 package io.reactivex;
 
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import org.openjdk.jmh.annotations.*;
@@ -38,6 +39,7 @@ public class FlatMapJustPerf {
     @Setup
     public void setup() {
         Integer[] array = new Integer[times];
+        Arrays.fill(array, 123);
 
         flowable = Flowable.fromArray(array).flatMap(new Function<Integer, Publisher<Integer>>() {
             @Override
