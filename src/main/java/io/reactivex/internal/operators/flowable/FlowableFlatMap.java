@@ -84,6 +84,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
         static final InnerSubscriber<?, ?>[] CANCELLED = new InnerSubscriber<?, ?>[0];
 
         final AtomicLong requested = new AtomicLong();
+        final AtomicLong newRequested = new AtomicLong();
 
         Subscription upstream;
 
@@ -341,7 +342,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
         @Override
         public void request(long n) {
             if (SubscriptionHelper.validate(n)) {
-                BackpressureHelper.add(requested, n);
+                BackpressureHelper.add(newRequested, n);
                 drain();
             }
         }
@@ -376,6 +377,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
                 }
                 SimplePlainQueue<U> svq = queue;
 
+                BackpressureHelper.add(requested, newRequested.getAndSet(0));
                 long r = requested.get();
                 boolean unbounded = r == Long.MAX_VALUE;
 
