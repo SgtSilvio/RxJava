@@ -1579,7 +1579,7 @@ public class FlowableMergeTest {
 
         pp.onNext(1);
 
-        BackpressureHelper.add(ms.requested, 2);
+        ms.request(2);
 
         pp.onNext(2);
 
@@ -1597,7 +1597,7 @@ public class FlowableMergeTest {
 
         ms.onNext(Flowable.just(1));
 
-        BackpressureHelper.add(ms.requested, 2);
+        ms.request(2);
 
         ms.onNext(Flowable.just(2));
 

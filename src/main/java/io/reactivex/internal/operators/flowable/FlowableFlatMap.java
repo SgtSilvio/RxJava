@@ -83,7 +83,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
 
         static final InnerSubscriber<?, ?>[] CANCELLED = new InnerSubscriber<?, ?>[0];
 
-        final AtomicLong requested = new AtomicLong();
+        long requested;
         final AtomicLong newRequested = new AtomicLong();
 
         Subscription upstream;
@@ -229,12 +229,12 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
 
         void tryEmitScalar(U value) {
             if (get() == 0 && compareAndSet(0, 1)) {
-                long r = requested.get();
+                long r = requested;
                 SimpleQueue<U> q = queue;
                 if (r != 0L && (q == null || q.isEmpty())) {
                     downstream.onNext(value);
                     if (r != Long.MAX_VALUE) {
-                        requested.decrementAndGet();
+                        requested = r - 1;
                     }
                     if (maxConcurrency != Integer.MAX_VALUE && !cancelled
                             && ++scalarEmitted == scalarLimit) {
@@ -277,12 +277,12 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
 
         void tryEmit(U value, InnerSubscriber<T, U> inner) {
             if (get() == 0 && compareAndSet(0, 1)) {
-                long r = requested.get();
+                long r = requested;
                 SimpleQueue<U> q = inner.queue;
                 if (r != 0L && (q == null || q.isEmpty())) {
                     downstream.onNext(value);
                     if (r != Long.MAX_VALUE) {
-                        requested.decrementAndGet();
+                        requested = r - 1;
                     }
                     inner.requestMore(1);
                 } else {
@@ -298,11 +298,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
                     return;
                 }
             } else {
-                SimpleQueue<U> q = inner.queue;
-                if (q == null) {
-                    q = new SpscArrayQueue<U>(bufferSize);
-                    inner.queue = q;
-                }
+                SimpleQueue<U> q = getInnerQueue(inner);
                 if (!q.offer(value)) {
                     onError(new MissingBackpressureException("Inner queue full?!"));
                     return;
@@ -377,15 +373,13 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
                 }
                 SimplePlainQueue<U> svq = queue;
 
-                BackpressureHelper.add(requested, newRequested.getAndSet(0));
-                long r = requested.get();
+                long r = BackpressureHelper.addCap(requested, newRequested.getAndSet(0));
                 boolean unbounded = r == Long.MAX_VALUE;
 
                 long replenishMain = 0;
 
                 if (svq != null) {
                     for (;;) {
-                        long scalarEmission = 0;
                         U o = null;
                         while (r != 0L) {
                             o = svq.poll();
@@ -400,15 +394,10 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
                             child.onNext(o);
 
                             replenishMain++;
-                            scalarEmission++;
                             r--;
                         }
-                        if (scalarEmission != 0L) {
-                            if (unbounded) {
-                                r = Long.MAX_VALUE;
-                            } else {
-                                r = requested.addAndGet(-scalarEmission);
-                            }
+                        if (unbounded) {
+                            r = Long.MAX_VALUE;
                         }
                         if (r == 0L || o == null) {
                             break;
@@ -511,9 +500,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
                                 produced++;
                             }
                             if (produced != 0L) {
-                                if (!unbounded) {
-                                    r = requested.addAndGet(-produced);
-                                } else {
+                                if (unbounded) {
                                     r = Long.MAX_VALUE;
                                 }
                                 is.requestMore(produced);
@@ -548,6 +535,7 @@ public final class FlowableFlatMap<T, U> extends AbstractFlowableWithUpstream<T,
                 if (replenishMain != 0L && !cancelled) {
                     upstream.request(replenishMain);
                 }
+                requested = r;
                 if (innerCompleted) {
                     continue;
                 }
